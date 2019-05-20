@@ -425,6 +425,12 @@ bgzip $sample.filter.biallelic.vcf
 $GATK IndexFeatureFile \
     -F $sample.filter.biallelic.vcf.gz
 ```
+### 8.5 Remove sites in the repeat regions
+
+```
+custom python script
+```
+
 ### 9 Evaluating the quality of  variant callset
 ```
 $GATK VariantEval \
