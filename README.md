@@ -150,48 +150,47 @@ gatk GenotypeGVCFs \
 This annotation estimates the probability of the called samples exhibiting excess heterozygosity with respect to the null hypothesis that the samples are unrelated. The higher the score, the higher the chance that the variant is a technical artifact or that there is consanguinuity among the samples. In contrast to Inbreeding Coefficient, there is no minimal number of samples for this annotation. If samples are known to be related, a pedigree file can be provided so that the calculation is only performed on founders and offspring are excluded.
 
 
-***All filter need to be plotted from the vcf file first before filtering to ensure the suitable parameters.***
 ***The filter should be more strict for BQSR, and can be normal for the last round (after get the final BQSR result)***
 
-###4.1a SNP hard-filter
+###4.1a SNP hard filters
 
 ```
 # Extract SNP from call set
 $GATK SelectVariants \
     -select-type SNP \
-    -V genotypeGVCFs.vcf.gz \
-    -O genotypeGVCFs.snp.vcf.gz
+    -V $genotypeGVCFs.vcf.gz \
+    -O $genotypeGVCFs.snp.vcf.gz
 
 # Plot the figure, determine parameters for filtering SNPs
 
 # Apply the filter to the SNP call set
 $GATK VariantFiltration \
-    -V genotypeGVCFs.snp.vcf.gz \
+    -V $genotypeGVCFs.snp.vcf.gz \
     --filter-expression "DP > 480.0 || QD < 2.0 || MQ < 40.0 || FS > 50.0 || ExcessHet > 40.0 || SOR > 3.0 || MQRankSum < -12.5 || ReadPosRankSum < -8.0" \
     --filter-name "Filter" \
-    -O genotypeGVCFs.snp.filter.vcf.gz
+    -O $genotypeGVCFs.snp.filter.vcf.gz
 
 # Plot the figure, double check the filter performance
 
 ```
 
-###4.1b Indel hard-filter
+###4.1b Indel hard filters
 
 ```
 # Extract Indel from call set
 $GATK SelectVariants \
     -select-type INDEL \
-    -V genotypeGVCFs.vcf.gz \
-    -O genotypeGVCFs.indel.vcf.gz
+    -V $genotypeGVCFs.vcf.gz \
+    -O $genotypeGVCFs.indel.vcf.gz
 
 # Plot the figure, determine parameters for filtering SNPs
 
 # Apply the filter to the SNP call set
 $GATK VariantFiltration \
-    -V genotypeGVCFs.indel.vcf.gz \
+    -V $genotypeGVCFs.indel.vcf.gz \
     --filter-expression "DP > 480.0 || QD < 2.0 || FS > 50.0 || ExcessHet > 40.0 || SOR > 3.0 || ReadPosRankSum < -20.0" \
     --filter-name "Filter" \
-    -O genotypeGVCFs.indel.filter.vcf.gz
+    -O $genotypeGVCFs.indel.filter.vcf.gz
 
 # Plot the figure, double check the filter performance
 
@@ -203,8 +202,8 @@ Since VariantFilteration only mark the read as "Filter" (the name is defined by 
 ```
 $GATK SelectVariants \
     --exclude-filtered \
-    -V input.XXX.filter.vcf.gz \
-    -O removeFilter.vcf.gz
+    -V $genotypeGVCFs.XXX.filter.vcf.gz \
+    -O $removeFilter.vcf.gz
 ```
 
 
@@ -212,19 +211,10 @@ $GATK SelectVariants \
 
 ```
 $GATK MergeVcfs \
-    -I genotypeGVCFs.snp.removeFilter.vcf.gz \
-    -I genotypeGVCFs.indel.removeFilter.vcf.gz \
-    -O genotypeGVCFs.filter.vcf.gz
-
-# remove useless doc
-rm -f \
-    genotypeGVCFs.snp.vcf.gz* \
-    genotypeGVCFs.snp.filter.vcf.gz* \
-    genotypeGVCFs.indel.vcf.gz* \
-    genotypeGVCFs.indel.filter.vcf.gz*
-
+    -I $genotypeGVCFs.snp.removeFilter.vcf.gz \
+    -I $genotypeGVCFs.indel.removeFilter.vcf.gz \
+    -O $genotypeGVCFs.filter.vcf.gz
 ```
-
 
 --------------
 
@@ -232,28 +222,22 @@ rm -f \
 
 GATK introduction
 Summary: https://gatkforums.broadinstitute.org/gatk/discussion/6308/evaluating-the-quality-of-a-variant-callset
-VariantEval: https://gatkforums.broadinstitute.org/gatk/discussion/6211/howto-evaluate-a-callset-with-varianteval
-CollectVariantCallingMetrics: https://software.broadinstitute.org/gatk/documentation/article?id=6186
-https://www.jianshu.com/p/d760f55dfc6c
-
-Tools: ```CollectVariantCallingMetrics```,  ```VariantEval```
-Metrics: ```Number of Indels & SNPs```,  ```Indel Ratio```, ```TiTv Ration```
 
 >**1. Number of Indels & SNPs**
 >It counts only biallelic sites and filters out multiallelic sites
 >Compare the number of Indels and SNPs between different sample.
-
+>
 >**2. Indel Ratio**
 >The indel ratio is determined to be the total number of insertions divided by the total number of deletions; this tool does not include filtered variants in this calculation. Usually, the indel ratio is around 1, as insertions occur typically as frequently as deletions. However, in rare variant studies, indel ratio should be around 0.2-0.5. For example, an indel ratio of ~0.95 indicates that these variants are not likely to have a bias affecting their insertion/deletion ratio.
-
+>
 >**3. TiTv Ratio**: This metric is the ratio of **t**rans**i**tion (Ti, A<->G or C<->T) to **t**rans**v**ersion (Tv, A<->C，A<->T，G<->C和G<->T) SNPs. 
-
+>
 >If the distribution of transition and transversion mutations were random (i.e. without any biological influence) we would expect a ratio of **0.5**. This is simply due to the fact that there are twice as many possible transversion mutations than there are transitions. 
-
+>
 >However, in the biological context, it is very common to see a methylated cytosine undergo deamination to become thymine. As this is a transition mutation, it has been shown to increase the expected random ratio from **0.5** to **~2.01**. 
-
+>
 >The TiTv Ration for **Novel variants** is around **1.5**.
-
+>
 >Furthermore, **CpG islands**, usually found in primer regions, have higher concentrations of methylcytosines. By including these regions, **whole exome sequencing** shows an even stronger lean towards transition mutations, with an expected ratio of **3.0**-**3.3**.
 
 
