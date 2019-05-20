@@ -1,103 +1,67 @@
 # 12-trees
-##DATA
 
-Reference:
+## Introduction
 
-```
-/home/rob/work/Eucalyptus_pauciflora/genome/data/Eucalyptus_pauciflora/masurca_35kb_pilon5.fa
-```
+## Data
+We have eight branches: A,B,C,D,E,F,G,H, each branch has 3 bio replicates, each bio replicates has 2 technical replicates.
 
-Reads (after trim)
-
-```
- /home/raymond/work/Eucalyptus_pauciflora/genome/bin/raw_read_check/8_branches/short_read/2_bbduk/428_result
- /home/raymond/work/Eucalyptus_pauciflora/genome/bin/raw_read_check/8_branches/short_read/2_bbduk/431_result
-```
-
-Working Dir
+## Method
+### 1 Map reads to genome reference using ngm
 
 ```
-/home/rob/work/Eucalyptus_pauciflora/genome/bin/somatic_variation
-```
+#R1, R2 are the illumina paired-end reads
+ID=$sampleID
+RGLB=$(zcat --force $R1 | head -n 1 | cut -d: -f3,4 --output-delimiter=.)
+ngm \
+    --color \
+    -t $threads \
+    -r $genome_fasta \
+    -p \
+    -1 $R1 \
+    -2 $R2 \
+    --rg-id $ID \
+    --rg-sm $ID \
+    --rg-lb $RGLB \
+    --rg-pl illumina \
+    -o $outputSam
 
-Final result
-
-```
-/home/rob/work/Eucalyptus_pauciflora/genome/bin/somatic_variation/result/5_filter/*/*indel/snp.filter.biall.vcf.gz
+samtools sort -@ $threads -O bam -o $outputBam $outputSam
 ```
 
 --------------
-##METHOD
-###1 Map reads to reference (ngm)
-*NOTE*: should add ```--rg-id --rg-sm --rg-lb --rg-pb``` for GATK (unique group ID) 
-
-3 bio replicates: such as RL41, RL49, RL57
-2 tech replicates: 428, 431
-name: 428_RL41: A1, 428_RL49: A2, 428_RL57: A3, 431_RL41: A4, 431_RL49: A5, 431_RL57: A6
-
-8 branches: A,B,C,D,E,F,G,H 
-
---------------
-###2 Mark duplicates
-###2.1 Merge different runs according to sample (ABCDEFGH): A, B
-***Q: only merge tech replicates (428, 431), or even merge bio replicates (RL41, RL49, RL57)***
-
-*NOTE*: ```picard``` can keep @PG, but ```samtools``` will lose it when merge
+### 2 Mark duplicates
+### 2.1 Merge different technical replicates according to sample (ABCDEFGH): A, B
 
 ```
-# sample.aligned.bam is the merge output
 $GATK MergeSamFiles\ 
- -I input.aligned.1.bam \
- -I input.aligned.2.bam\
- ...
- -O sample.aligned.bam
+ -I $outputBam_techRep_1.sort.bam \
+ -I $outputBam_tecRep_2.sort.bam \
+ -O $merge.bam
 ```
 
 ###2.2 Sort BAM files
 
 ```
 $GATK SortSam \ 
-    -I sample.aligned.sam \ 
-    -O sample.sort.bam \ 
+    -I $merge.bam \ 
+    -O $sample.sort.bam \ 
     -SO coordinate
-
-#or
-
-samtools sort \
-    -@ $threads \
-    -O bam \
-    -o sample.sort.bam \
-    sample.aligned.bam
 ``` 
 
 ###2.3 Make duplicateds
 
 ```
 $GATK MarkDuplicates \ 
-    -I sample.sort.bam \ 
-    -O sample.sort.dedup.bam \
-    -M metrics_sample.txt
+    -I $sample.sort.bam \ 
+    -O $sample.sort.dedup.bam \
+    -M $metrics_sample.txt
 ```
 
 ###2.4 Build index
 
 ```
-samtools index sample.sort.dedup.bam
-
-#or
-
 $GATK BuildBamIndex \ 
-    -I sample.sort.dedup.bam
-```
-
-###2.5 Plot the insert size figure
-
-```
-$GATK CollectInsertSizeMetrics \
-    -I sample.sort.dedup.bam  \
-    -O insert_size_metrics \
-    -H insert_size_histogram.pdf \
-#M=0.5
+    -I $sample.sort.dedup.bam
 ```
 --------------
 ###NOTE1
