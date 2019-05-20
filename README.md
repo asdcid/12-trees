@@ -120,7 +120,7 @@ gatk GenotypeGVCFs \
 
 --------------
 
-###4 Filter Variants (Hard filters)
+### 4 Filter Variants (Hard filters)
 
 
 >**Parametersfor hard-filters**
@@ -152,7 +152,7 @@ This annotation estimates the probability of the called samples exhibiting exces
 
 ***The filter should be more strict for BQSR, and can be normal for the last round (after get the final BQSR result)***
 
-###4.1a SNP hard filters
+### 4.1a SNP hard filters
 
 ```
 # Extract SNP from call set
@@ -174,7 +174,7 @@ $GATK VariantFiltration \
 
 ```
 
-###4.1b Indel hard filters
+### 4.1b Indel hard filters
 
 ```
 # Extract Indel from call set
@@ -196,7 +196,7 @@ $GATK VariantFiltration \
 
 ```
 
-###4.2 Exclude filter sites
+### 4.2 Exclude filter sites
 Since VariantFilteration only mark the read as "Filter" (the name is defined by yourself) and PASS (the name is defined by GATK) in fields[6], get the "Pass reads"
 
 ```
@@ -206,8 +206,7 @@ $GATK SelectVariants \
     -O $removeFilter.vcf.gz
 ```
 
-
-###4.3 Merge SNP and Indel
+### 4.3 Merge SNP and Indel
 
 ```
 $GATK MergeVcfs \
@@ -215,10 +214,36 @@ $GATK MergeVcfs \
     -I $genotypeGVCFs.indel.removeFilter.vcf.gz \
     -O $genotypeGVCFs.filter.vcf.gz
 ```
+--------------
+**Biallelic sites**
+Only include the biallelic site, specific locus in a genome that contains two observed alleles (-m2 -M2: remove multiallelic site, a specific locus in a genome that contains three or more observed alleles).
+
+In GATK:
+>True multiallelic sites are not observed very frequently unless you look at very large cohorts, so they are often taken as a sign of a noisy region where artifacts are likely.
+
+--------------
+### 4.4 Remove multiallelic sites
+
+```
+#get the biallelic sites
+bcftools view \
+    -m2 \
+    -M2 \
+    -v snps \
+    -o $genotypeGVCFs.filter.biallelic.vcf \
+    $genotypeGVCFs.filter.vcf.gz
+
+
+bgzip $genotypeGVCFs.filter.biallelic.vcf
+
+$GATK IndexFeatureFile \
+    -F $genotypeGVCFs.filter.biallelic.vcf.gz
+
+```
 
 --------------
 
-###5 Evaluating the quality of  variant callset
+### 5 Evaluating the quality of  variant callset
 
 GATK introduction
 Summary: https://gatkforums.broadinstitute.org/gatk/discussion/6308/evaluating-the-quality-of-a-variant-callset
@@ -242,65 +267,13 @@ Summary: https://gatkforums.broadinstitute.org/gatk/discussion/6308/evaluating-t
 
 
 
-###5.1 VariantEval 
+### 5.1 VariantEval 
 
 ```
-# Basic output:
 $GATK VariantEval \
    -O SampleVariants_Evaluation.eval.grp \
-   --eval genotypeGVCFs.filter.vcf.gz
-
-
-```
-
-###5.1a CollectVariantCallingMetrics (May not work, we don't have the *True* SNP set)
-
-```
-CollectVariantCallingMetrics \
-    -I genotypeGVCFs.filter.vcf.gz \
-    -O output_metrics \
-    --DBSNP dbsnp_138.b37.excluding_sites_after_129.vcf 
-```
-
-###5.2 Remove multiallelic sites
-
-```
-#get the biallelic sites
-bcftools view \
-    -m2 \
-    -M2 \
-    -v snps \
-    -o genotypeGVCFs.filter.biallelic.vcf \
-    genotypeGVCFs.filter.vcf.gz
-
-#can't be gzip
-bgzip genotypeGVCFs.filter.biallelic.vcf
-
-$GATK IndexFeatureFile \
-    -F genotypeGVCFs.filter.biallelic.vcf.gz
-
+   --eval $genotypeGVCFs.filter.biallelic.vcf.gz
 ```
 --------------
 
-**Biallelic sites**
-Only include the biallelic site, specific locus in a genome that contains two observed alleles (-m2 -M2: remove multiallelic site, a specific locus in a genome that contains three or more observed alleles).
-
-In GATK:
->True multiallelic sites are not observed very frequently unless you look at very large cohorts, so they are often taken as a sign of a noisy region where artifacts are likely.
-
-In somatic variation pipeline (https://github.com/adamjorr/somatic-variation)
->We recommend following this with a depth and heterozygosity filter and removing any non-snps. This can be accomplished by running
-
---------------
-
-
-###5.3 Check quality again after removed multiallelic sites
-
-```
-# Basic output:
-$GATK VariantEval \
-   -O SampleVariants_Evaluation.eval.grp \
-   --eval genotypeGVCFs.filter.biallelic.vcf.gz
-```
---------------
 
