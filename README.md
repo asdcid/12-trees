@@ -83,13 +83,31 @@ $GATK CreateSequenceDictionary \
 
 ```
 #heterozygosity is different in different species
-$GATK HaplotypeCaller \
-  -R $genome_fasta \
-  --emit-ref-confidence GVCF \
-  -I $sample.sort.dedup.bam \
-  -stand-call-conf 50 \
-  --heterozygosity 0.015 \
-  -O $sample.g.vcf.gz
+#for speeding up this step, separated the ref according to the scaffold to run
+chroms=($(grep '>' $genome_fasta |sed 's/>//' | tr '\n' ' '))
+
+for chr in ${chroms[@]}
+do
+    $GATK HaplotypeCaller \
+      -R $genome_fasta \
+      --emit-ref-confidence GVCF \
+      -I $sample.sort.dedup.bam \
+      -stand-call-conf 50 \
+      --heterozygosity 0.015 \
+      -O ${sample}.${chr}.g.vcf.gz &
+done
+wait
+
+#merge results
+for sample in ${sample}.*.g.vcf.gz
+do
+    sample_gvcfs=${sample_gvcfs}" -V ${sample}"
+done
+
+$GATK CombineGVCFs \
+      -R $genome_fasta \
+      ${sample_gvcfs} \
+      -O $sample.g.vcf.gz
 ```
 
 ### 3.3 Consolidate GVCFs (joint genotype)
@@ -337,12 +355,29 @@ The analysis of figures are in https://gatkforums.broadinstitute.org/gatk/discus
 
 ```
 #heterozygosity is different in different species
-$GATK HaplotypeCaller \
-  -R $genome_fasta \
-  -I $sample.sort.dedup.rec.bam \
-  --dbsnp $genotypeGVCFs.filter.biallelic.vcf.gz \
-  --heterozygosity 0.015 \
-  -O $sample.vcf.gz
+#for speeding up this step, separated the ref according to the scaffold to run
+
+chroms=($(grep '>' $genome_fasta |sed 's/>//' | tr '\n' ' '))
+    for chr in ${chroms[@]}
+do
+    $GATK HaplotypeCaller \
+      -R $genome_fasta \
+      -I $sample.sort.dedup.rec.bam \
+      --dbsnp $genotypeGVCFs.filter.biallelic.vcf.gz \
+      --heterozygosity 0.015 \
+      -O ${sample}.${chr}.vcf.gz &
+done
+wait
+    
+#merged results
+for sample in ${sample}.*.vcf.gz
+do
+    sample_gvcfs=${sample_gvcfs}" -I ${sample}"
+done
+
+$GATK SortVcf \
+      ${sample_gvcfs} \
+      -O $sample.vcf.gz
 ```
 
 ### 8 Filter Variants (Hard filters)
@@ -425,10 +460,11 @@ bgzip $sample.filter.biallelic.vcf
 $GATK IndexFeatureFile \
     -F $sample.filter.biallelic.vcf.gz
 ```
-### 8.5 Remove sites in the repeat regions
+### 8.5 Remove sites in the repeat and homopolymer regions
+Homopolymer here is defined as more than 6 identical nt. This script also count the SNPs according to: 1. all three replicates need to have the same genotype. But also, this needs to be true for EVERY branch at that site. 2. at least one branch needs to have a genotype that's different from the other 7 branches at that site. 
 
 ```
-custom python script
+removeRepeatSiteAndCalucate.py
 ```
 
 ### 9 Evaluating the quality of  variant callset
