@@ -203,7 +203,7 @@ Since VariantFilteration only mark the read as "Filter" (the name is defined by 
 $GATK SelectVariants \
     --exclude-filtered \
     -V $genotypeGVCFs.XXX.filter.vcf.gz \
-    -O $removeFilter.vcf.gz
+    -O $genotypeGVCFs.xxx.removeFilter.vcf.gz
 ```
 
 ### 4.3 Merge SNP and Indel
@@ -271,9 +271,163 @@ Summary: https://gatkforums.broadinstitute.org/gatk/discussion/6308/evaluating-t
 
 ```
 $GATK VariantEval \
-   -O SampleVariants_Evaluation.eval.grp \
+   -O $SampleVariants_Evaluation.eval.grp \
    --eval $genotypeGVCFs.filter.biallelic.vcf.gz
 ```
 --------------
 
+### 6 Base Quality Score Recalibration (BQSR)
+Since we do not have ```known_sites```, we use the vcf generated above as the ```known_sites``` to adjust the data, and run the variant call again.  
 
+>"Note,	if	you	wish	to	do	BQSR	on	non-human	samples,	you	can	use	the	above	
+filtered	file	(but	generated	from	the	whole	genome)	as	the	“known”	variant	
+input.			This	set	does	not	need	to	be	precise	since	the	amount	of	error	in	the	
+reads	usually	far	exceeds	the	number	of	variants	that	are	called,	and	true	
+positives	should	not	generally	exhibit	typical	BQSR	captured	patterns." https://qcb.ucla.edu/wp-content/uploads/sites/14/2017/08/gatkDay3.pdf
+
+### 6.1 Analyze patterns of covariation in the dataset, model the error modes and compute adjustments
+
+```
+$GATK BaseRecalibrator \
+    -R $genome_fasta \
+    -I $sample.sort.dedup.bam \
+    -O $recalibration_pre.table \
+    --known-sites $genotypeGVCFs.filter.biallelic.vcf.gz 
+```
+
+### 6.2. Apply recalibration adjustments to BAM
+
+```
+$GATK ApplyBQSR \
+    -R $genome_fasta \
+    -I $sample.sort.dedup.bam \
+    -O $sample.sort.dedup.rec.bam \
+    -bqsr $recalibration_pre.table \
+    --add-output-sam-program-record 
+```
+
+### 6.3 Visualizing the quality of a recalibration run
+### 6.3.1 Get recalibration table again 
+Using _sample.sort.dedup.rec.bam_ as input, using _sample.sort.dedup.rec.bam_  in the downstream analysis if all looks good with the AnalyzeCovariates plots
+
+```
+$GATK BaseRecalibrator \
+    -R $genome_fasta \
+    -I $sample.sort.dedup.rec.bam \
+    -O $recalibration_post.table  \
+    --known-sites $genotypeGVCFs.filter.biallelic.vcf.gz \
+```
+
+### 6.3.2 Generate before/after plots, and csv
+
+```
+$GATK AnalyzeCovariates \
+    -before $recalibration_pre.table \
+    -after $recalibration_post.table \
+    -plots $AnalyzeCovariates.pdf
+```
+The analysis of figures are in https://gatkforums.broadinstitute.org/gatk/discussion/44/base-quality-score-recalibration-bqsr
+**NOTE**: the recalibration may change the quality score (such as from ~40-50 to ~20-30), so don't set the in -stand-call-conf in haplotypeCaller. 
+
+--------------------
+
+### 7 HaplotypeCaller using recalibrated data
+
+**NOTE**: run step 7 - 9 for each sample
+
+```
+#heterozygosity is different in different species
+$GATK HaplotypeCaller \
+  -R $genome_fasta \
+  -I $sample.sort.dedup.rec.bam \
+  --dbsnp $genotypeGVCFs.filter.biallelic.vcf.gz \
+  --heterozygosity 0.015 \
+  -O $sample.vcf.gz
+```
+
+### 8 Filter Variants (Hard filters)
+### 8.1a SNP hard filters
+```
+# Extract SNP from call set
+$GATK SelectVariants \
+    -select-type SNP \
+    -V $sample.vcf.gz \
+    -O $sample.snp.vcf.gz
+
+# Plot the figure, determine parameters for filtering SNPs
+
+# Apply the filter to the SNP call set
+$GATK VariantFiltration \
+    -V $sample.snp.vcf.gz \
+    --filter-expression "DP > 480.0 || QD < 2.0 || MQ < 40.0 || FS > 60.0 || ExcessHet > 40.0 || SOR > 3.0 || MQRankSum < -12.5 || ReadPosRankSum < -8.0" \
+    --filter-name "Filter" \
+    -O $sample.snp.filter.vcf.gz
+
+# Plot the figure, double check the filter performance
+
+```
+
+### 8.1b Indel hard filters
+
+```
+# Extract Indel from call set
+$GATK SelectVariants \
+    -select-type INDEL \
+    -V $sample.vcf.gz \
+    -O $sample.indel.vcf.gz
+
+# Plot the figure, determine parameters for filtering SNPs
+
+# Apply the filter to the SNP call set
+$GATK VariantFiltration \
+    -V $sample.indel.vcf.gz \
+    --filter-expression "DP > 480.0 || QD < 2.0 || FS > 200.0 || ExcessHet > 40.0 || SOR > 3.0 || ReadPosRankSum < -20.0" \
+    --filter-name "Filter" \
+    -O $sample.indel.filter.vcf.gz
+
+# Plot the figure, double check the filter performance
+
+```
+
+### 8.2 Exclude filter sites
+Since VariantFilteration only mark the read as "Filter" (the name is defined by yourself) and PASS (the name is defined by GATK) in fields[6], get the "Pass reads"
+
+```
+$GATK SelectVariants \
+    --exclude-filtered \
+    -V $sample.XXX.filter.vcf.gz \
+    -O $sample.XXX.removeFilter.vcf.gz
+```
+
+### 8.3 Merge SNP and Indel
+
+```
+$GATK MergeVcfs \
+    -I $sample.snp.removeFilter.vcf.gz \
+    -I $sample.indel.removeFilter.vcf.gz \
+    -O $sample.filter.vcf.gz
+```
+
+### 8.4 Remove multiallelic sites
+
+```
+#get the biallelic sites
+bcftools view \
+    -m2 \
+    -M2 \
+    -v snps \
+    -o $sample.filter.biallelic.vcf \
+    $sample.filter.vcf.gz
+
+
+bgzip $sample.filter.biallelic.vcf
+
+$GATK IndexFeatureFile \
+    -F $sample.filter.biallelic.vcf.gz
+```
+### 9 Evaluating the quality of  variant callset
+```
+$GATK VariantEval \
+   -O $SampleVariants_Evaluation.eval.grp \
+   --eval $sample.filter.biallelic.vcf.gz
+```
