@@ -464,10 +464,10 @@ $GATK IndexFeatureFile \
 Homopolymer here is defined as more than 6 identical nt. This script also count the SNPs according to: 1. all three replicates need to have the same genotype. But also, this needs to be true for every branch at that site. 2. at least one branch needs to have a genotype that's different from the other 7 branches at that site. 
 
 ```
-removeRepeatSiteAndCalucate.py
+removeRepeatSiteAndCalculate.py
 ```
 
-### 9 Evaluating the quality of  variant callset
+### 9 Evaluating the quality of variant callset
 ```
 $GATK VariantEval \
    -O $SampleVariants_Evaluation.eval.grp \
