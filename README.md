@@ -284,9 +284,6 @@ GATK introduction
 >Furthermore, **CpG islands**, usually found in primer regions, have higher concentrations of methylcytosines. By including these regions, **whole exome sequencing** shows an even stronger lean towards transition mutations, with an expected ratio of **3.0**-**3.3**.
 
 
-
-### 5.1 VariantEval 
-
 ```
 $GATK VariantEval \
    -O $SampleVariants_Evaluation.eval.grp \
