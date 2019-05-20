@@ -35,7 +35,7 @@ samtools sort -@ $threads -O bam -o $outputBam $outputSam
 ```
 $GATK MergeSamFiles\ 
  -I $outputBam_techRep_1.sort.bam \
- -I $outputBam_tecRep_2.sort.bam \
+ -I $outputBam_techRep_2.sort.bam \
  -O $merge.bam
 ```
 
