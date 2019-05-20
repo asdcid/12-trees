@@ -246,7 +246,7 @@ $GATK IndexFeatureFile \
 ### 5 Evaluating the quality of  variant callset
 
 GATK introduction
-Summary: https://gatkforums.broadinstitute.org/gatk/discussion/6308/evaluating-the-quality-of-a-variant-callset
+ https://gatkforums.broadinstitute.org/gatk/discussion/6308/evaluating-the-quality-of-a-variant-callset
 
 >**1. Number of Indels & SNPs**
 >It counts only biallelic sites and filters out multiallelic sites
