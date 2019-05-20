@@ -39,7 +39,7 @@ $GATK MergeSamFiles\
  -O $merge.bam
 ```
 
-###2.2 Sort BAM files
+### 2.2 Sort BAM files
 
 ```
 $GATK SortSam \ 
@@ -48,7 +48,7 @@ $GATK SortSam \
     -SO coordinate
 ``` 
 
-###2.3 Make duplicateds
+### 2.3 Make duplicateds
 
 ```
 $GATK MarkDuplicates \ 
@@ -57,171 +57,98 @@ $GATK MarkDuplicates \
     -M $metrics_sample.txt
 ```
 
-###2.4 Build index
+### 2.4 Build index
 
 ```
 $GATK BuildBamIndex \ 
     -I $sample.sort.dedup.bam
 ```
 --------------
-###NOTE1
-The next step should be "Base Quality Score Recalibration" (BQSR), but it requires ***knownSites***. According to GATK suggests, I run the first round without BSQR, then use the SNP result to call the recalibrated data, and run SNP again. Repeat this step a few times until convergence.
->**Q: I'm working on a genome that doesn't really have a good SNP database yet. I'm wondering if it still makes sense to run base quality score recalibration without known SNPs.**
-
->A: The base quality score recalibrator treats every reference mismatch as indicative of machine error. True polymorphisms are legitimate mismatches to the reference and shouldn't be counted against the quality of a base. We use a database of known polymorphisms to skip over most polymorphic sites. Unfortunately without this information the data becomes almost completely unusable since the quality of the bases will be inferred to be much much lower than it actually is as a result of the reference-mismatching SNP sites.
-
->However, all is not lost if you are willing to experiment a bit. You can bootstrap a database of known SNPs. Here's how it works:
-
->First do an initial round of SNP calling on your original, unrecalibrated data.
-Then take the SNPs that you have the highest confidence in and use that set as the database of known SNPs by feeding it as a VCF file to the base quality score recalibrator.
->Finally, do a real round of SNP calling with the recalibrated data. These steps could be repeated several times until convergence.
+### NOTE
+The next step should be "Base Quality Score Recalibration" (BQSR), but it requires ***knownSites***. According to GATK suggests, I run the first call variants without BSQR, then use the variants result to call the recalibrated data, and using the recalibrated data to call variants again. 
 
 --------------
 
-###3. Somatic variatance call
-###3.1 Create dict for genome reference
+### 3. HaplotypeCaller
+### 3.1 Create dict for genome reference
 
 ```
 $GATK CreateSequenceDictionary \
-    -R ${ref_fasta} \
-    -O ${ref/.fasta/.dict}
+    -R $genome_fasta \
+    -O ${genome_fasta/.fasta/.dict}
 ```
 --------------
 
-###3.2 Call variants per-sample with HaplotypeCaller
+### 3.2 Call variants per-sample with HaplotypeCaller
 
 ```
+#heterozygosity is different in different species
 $GATK HaplotypeCaller \
-  -R ${ref_fasta} \
+  -R $genome_fasta \
   --emit-ref-confidence GVCF \
-  -I sample.sort.dedup.bam \
+  -I $sample.sort.dedup.bam \
   -stand-call-conf 50 \
-  --heterozygosity $heterozygosity \
-  -O sample.g.vcf.gz
+  --heterozygosity 0.015 \
+  -O $sample.g.vcf.gz
 ```
 
-###3.3 Consolidate GVCFs (joint genotype)
+### 3.3 Consolidate GVCFs (joint genotype)
 This step may not necessary for 8 branches somatic variation call if we merge the 3 bio replicates together previously. 
 
-###3.3.1 Combine all sample's `gvcf` files
+### 3.3.1 Combine all sample's `gvcf` files
 ```
-$GATK CombineGVCFs \
-      -R ${ref_fasta} \
-      -V sample1.g.vcf.gz \
-      -V sample2.g.vcf.gz \ 
-      -O combined.g.vcf.gz
-
-#or 
 for sample in $samples
 do
     sample_gvcfs=${sample_gvcfs}"-V ${sample_gvcfs_outputDir}/${sample}.g.vcf.gz"
 done
 
 $GATK CombineGVCFs \
-      -R ${ref_fasta} \
+      -R $genome_fasta \
       ${sample_gvcfs} \
-      -O combined.g.vcf.gz
+      -O $combined.g.vcf.gz
 ```
 
-###3.3.2 Using GenotypeGVCFs to call joint genotype
+### 3.3.2 Using GenotypeGVCFs to call joint genotype
 
 ```
 gatk GenotypeGVCFs \
-    -R ${ref_fasta} \
+    -R $genome_fasta \
     --heterozygosity 0.015 \
-    --tmp-dir $TMP \
-    -A ExcessHet \
-    -A FisherStrand \
-    -A QualByDepth \
-    -A StrandOddsRatio \
-    -A RMSMappingQuality \
-    -A MappingQualityRankSumTest \
-    -A ReadPosRankSumTest \
-    -V combined.g.vcf.gz \
-    -O genotypeGVCFs.vcf.gz
+    -V $combined.g.vcf.gz \
+    -O $genotypeGVCFs.vcf.gz
 ```
 
 --------------
 
-###4 Filter Variants by Variant (Quality Score) Recalibration
+###4 Filter Variants (Hard filters)
 
-**NOTE2**
-
-Two filter methods:
->**VQSR**:  recalibrate variant quality scores and produce a callset filtered for the desired levels of sensitivity and specificity
-
->**Hard-filters**: consists of choosing specific thresholds for one or more annotations and throwing out any variants that have annotation values above or below the set thresholds 
-
-Introduction about Hard-filters
-
-
-https://software.broadinstitute.org/gatk/documentation/article.php?id=6925
-
-
-https://www.jianshu.com/p/ff8204ae7ebf
-
-GATK example
-
-
-https://gatkforums.broadinstitute.org/gatk/discussion/2806/howto-apply-hard-filters-to-a-call-set
-
-However, VQSR require ```1. known variation sites``` and ```2. enough variants```. We don't have the ```known variation sites```, so we use the hard-filters. 
-
-We need to extract  ```SNP``` and ```indel```  from call set  (`vcf`) to do the hard-filters.
 
 >**Parametersfor hard-filters**
-
->**1. QualByDepth (QD)** usually <2.0
+>
+>**1. QualByDepth (QD)** 
 >This is the variant confidence (from the QUAL field) divided by the unfiltered depth of non-reference samples.
-
+>
 >**2. FisherStrand (FS)**
 >Phred-scaled p-value using Fisher’s Exact Test to detect strand bias (the variation being seen on only the forward or only the reverse strand) in the reads. More bias is indicative of false positive calls.
-
+>
 >**3. StrandOddsRatio (SOR)**
 >The StrandOddsRatio annotation is one of several methods that aims to evaluate whether there is strand bias in the data. Higher values indicate more strand bias.
-
->**4. RMSMappingQuality (MQ)**, not for indel, usually <40
+>
+>**4. RMSMappingQuality (MQ)**
 >This is the Root Mean Square of the mapping quality of the reads across all samples.
 >The score of *best mapping* for BWA is 60.  
-
->**5. MappingQualityRankSumTest (MQRankSum)**, not for indel
+>
+>**5. MappingQualityRankSumTest (MQRankSum)**
 >This is the u-based z-approximation from the Mann-Whitney Rank Sum Test for mapping qualities (reads with ref bases vs. those with the alternate allele). Note that the mapping quality rank sum test can not be calculated for sites without a mixture of reads showing both the reference and alternate alleles, i.e. this will only be applied to heterozygous calls.
-
+>
 >**6. ReadPosRankSumTest (ReadPosRankSum)**
 >This is the u-based z-approximation from the Mann-Whitney Rank Sum Test for the distance from the end of the read for reads with the alternate allele. If the alternate allele is only seen near the ends of reads, this is indicative of error. Note that the read position rank sum test can not be calculated for sites without a mixture of reads showing both the reference and alternate alleles, i.e. this will only be applied to heterozygous calls.
-
->**7. InbreedingCoeff** Optional (must have >10 samples), https://software.broadinstitute.org/gatk/documentation/tooldocs/4.0.3.0/org_broadinstitute_hellbender_tools_walkers_annotator_InbreedingCoeff.php
->Describes the heterozygosity of the called samples, though without explicitly taking into account the number of samples
->Likelihood-based test for the consanguinuity among samples
-This annotation estimates whether there is evidence of consanguinuity in a population. The higher the score, the higher the chance that some samples are related. If samples are known to be related, a pedigree file can be provided so that the calculation is only performed on founders and offspring are excluded.
-> only work with more than 10 samples, diploid genome. 
-
->**8. ExcessHet** Optional, related annotation: inbreedingCoeff, https://software.broadinstitute.org/gatk/documentation/tooldocs/4.1.2.0/org_broadinstitute_hellbender_tools_walkers_annotator_ExcessHet.php
+>
+>**7. ExcessHet** Optional, related annotation: inbreedingCoeff, https://software.broadinstitute.org/gatk/documentation/tooldocs/4.1.2.0/org_broadinstitute_hellbender_tools_walkers_annotator_ExcessHet.php
 >Describes the heterozygosity of the called samples, giving a probability of excess heterozygosity being observed
 >Phred-scaled p-value for exact test of excess heterozygosity.
 This annotation estimates the probability of the called samples exhibiting excess heterozygosity with respect to the null hypothesis that the samples are unrelated. The higher the score, the higher the chance that the variant is a technical artifact or that there is consanguinuity among the samples. In contrast to Inbreeding Coefficient, there is no minimal number of samples for this annotation. If samples are known to be related, a pedigree file can be provided so that the calculation is only performed on founders and offspring are excluded.
 
-Hard-filters standards for unknown company, BGI, GATK and somatic variation pipeline
-
-```
-               DP   QD    FS      SOR    MQ      MQRankSum  ReadPosRankSum InbreedingCoeff
-SNP   COMPANY <10   <2.0  >60.0   >4.0   <40.0   <-12.5      <-8.0
-      BGI           <2.0  >60.0   >3.0   <40.0   <-12.5      <-8.0
-      GATK          <2.0  >60.0   >3.0   <40.0   <-12.5      <-8.0
-
-INDEL COMPANY <10   <2.0  >200.0  >10,0                      <-20.0          <-0.8
-      BGI           <2.0  >200.0  >10.0          <-12.5      <-8.0
-      GATK          <2.0  >200.0  >10.0                      <-20.0
-
-```
-
-Hard-filters for somatic variation pipeline 
-
-https://github.com/adamjorr/somatic-variation
-
-```
-bcftools filter -g 50 -i 'DP <= 500 && ExcessHet <=40' repfiltered.vcf 
-```
 
 ***All filter need to be plotted from the vcf file first before filtering to ensure the suitable parameters.***
 ***The filter should be more strict for BQSR, and can be normal for the last round (after get the final BQSR result)***
