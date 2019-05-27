@@ -457,8 +457,8 @@ bgzip $sample.filter.biallelic.vcf
 $GATK IndexFeatureFile \
     -F $sample.filter.biallelic.vcf.gz
 ```
-### 8.5 Remove sites in the repeat and homopolymer regions
-Homopolymer here is defined as more than 6 identical nt. This script also count the SNPs according to: 1. all three replicates need to have the same genotype. But also, this needs to be true for every branch at that site. 2. at least one branch needs to have a genotype that's different from the other 7 branches at that site. 
+### 8.5 Remove sites in the repeat regions and homopolymer stretches
+Homopolymer stretches here are defined as more than 6 identical nt. This script also count the SNPs according to: 1. all three replicates need to have the same genotype. But also, this needs to be true for every branch at that site. 2. at least one branch needs to have a genotype that's different from the other 7 branches at that site. 
 
 ```
 removeRepeatSiteAndCalculate.py
