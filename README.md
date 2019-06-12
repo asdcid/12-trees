@@ -360,6 +360,7 @@ do
     $GATK HaplotypeCaller \
       -R $genome_fasta \
       -I $sample.sort.dedup.rec.bam \
+      --output-mode EMIT_ALL_CONFIDENT_SITES \
       --dbsnp $genotypeGVCFs.filter.biallelic.vcf.gz \
       --heterozygosity 0.015 \
       -O ${sample}.${chr}.vcf.gz &
