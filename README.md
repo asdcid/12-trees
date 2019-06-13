@@ -370,11 +370,11 @@ wait
 #merged results
 for sample in ${sample}.*.vcf.gz
 do
-    sample_gvcfs=${sample_gvcfs}" -I ${sample}"
+    sample_vcfs=${sample_vcfs}" -I ${sample}"
 done
 
 $GATK SortVcf \
-      ${sample_gvcfs} \
+      ${sample_vcfs} \
       -O $sample.vcf.gz
 ```
 
