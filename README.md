@@ -30,25 +30,17 @@ samtools sort -@ $threads -O bam -o $outputBam $outputSam
 
 --------------
 ### 2 Mark duplicates
-### 2.1 Merge different technical replicates according to sample (ABCDEFGH): A, B
+### 2.1 Merge different technical replicates according to sample (ABCDEFGH): A, B， and sort
 
 ```
 $GATK MergeSamFiles\ 
  -I $outputBam_techRep_1.sort.bam \
  -I $outputBam_techRep_2.sort.bam \
- -O $merge.bam
+ -SO coordinate
+ -O $sample.sort.bam
 ```
 
-### 2.2 Sort BAM files
-
-```
-$GATK SortSam \ 
-    -I $merge.bam \ 
-    -O $sample.sort.bam \ 
-    -SO coordinate
-``` 
-
-### 2.3 Make duplicateds
+### 2.2 Make duplicateds
 
 ```
 $GATK MarkDuplicates \ 
@@ -57,7 +49,7 @@ $GATK MarkDuplicates \
     -M $metrics_sample.txt
 ```
 
-### 2.4 Build index
+### 2.3 Build index
 
 ```
 $GATK BuildBamIndex \ 
