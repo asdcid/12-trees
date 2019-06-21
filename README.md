@@ -1,5 +1,6 @@
 # 12-trees
 
+
 ## Introduction
 
 ## Data
@@ -68,6 +69,8 @@ The next step should be "Base Quality Score Recalibration" (BQSR), but it requir
 $GATK CreateSequenceDictionary \
     -R $genome_fasta \
     -O ${genome_fasta/.fasta/.dict}
+    
+samtools faidx $genome_fasta
 ```
 --------------
 
